@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f6f1">
+  <title>Smart Bin Monitor</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #18251f;
+      --muted: #68776f;
+      --line: #dfe6df;
+      --paper: #ffffff;
+      --canvas: #f4f6f1;
+      --green: #236b4c;
+      --green-soft: #e6f3e9;
+      --amber: #935b0b;
+      --amber-soft: #fff1d8;
+      --red: #9b3d32;
+      --red-soft: #fff0ed;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--canvas);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.5;
+    }
+
+    .shell { width: min(1080px, calc(100% - 40px)); margin: 0 auto; }
+
+    header {
+      padding: 38px 0 30px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .topline { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+    .brand { display: flex; align-items: center; gap: 13px; }
+    .brand-mark {
+      display: grid;
+      width: 42px;
+      height: 42px;
+      place-items: center;
+      border-radius: 13px;
+      background: var(--green);
+      color: #fff;
+      font-size: 21px;
+    }
+    .eyebrow { margin: 0 0 4px; color: var(--muted); font-size: 11px; font-weight: 750; letter-spacing: .14em; text-transform: uppercase; }
+    h1 { margin: 0; font-size: clamp(23px, 4vw, 30px); letter-spacing: -.04em; }
+    .threshold-pill { border: 1px solid var(--line); border-radius: 999px; padding: 8px 13px; background: var(--paper); color: var(--muted); font-size: 13px; white-space: nowrap; }
+    .threshold-pill strong { color: var(--ink); }
+    .intro { margin: 15px 0 0 55px; color: var(--muted); font-size: 14px; }
+
+    main { padding: 28px 0 52px; }
+    .overview { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 29px; }
+    .stat, .panel, .bin-card { border: 1px solid var(--line); border-radius: 16px; background: var(--paper); box-shadow: 0 5px 18px #25382c08; }
+    .stat { padding: 17px 19px; }
+    .stat-label { color: var(--muted); font-size: 12px; font-weight: 650; }
+    .stat-value { margin-top: 4px; font-size: 25px; font-weight: 750; letter-spacing: -.04em; }
+    .stat-hint { color: var(--muted); font-size: 12px; }
+
+    .section-heading { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 13px; }
+    h2 { margin: 0; font-size: 18px; letter-spacing: -.02em; }
+    .section-note { color: var(--muted); font-size: 13px; }
+    .bin-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+    .bin-card { padding: 19px; }
+    .bin-head { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
+    .bin-id { margin: 0; overflow-wrap: anywhere; font-size: 16px; font-weight: 700; }
+    .bin-caption { margin: 3px 0 0; color: var(--muted); font-size: 12px; }
+    .badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 5px 9px; font-size: 11px; font-weight: 750; white-space: nowrap; }
+    .badge::before { width: 6px; height: 6px; border-radius: 50%; background: currentColor; content: ""; }
+    .badge.ok { background: var(--green-soft); color: var(--green); }
+    .badge.full { background: var(--amber-soft); color: var(--amber); }
+    .level-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-top: 27px; }
+    .level { font-size: 31px; font-weight: 760; letter-spacing: -.06em; }
+    .level small { color: var(--muted); font-size: 13px; font-weight: 500; letter-spacing: 0; }
+    .level-note { color: var(--muted); font-size: 12px; }
+    .meter { height: 9px; margin-top: 9px; overflow: hidden; border-radius: 999px; background: #edf0eb; }
+    .meter-fill { height: 100%; border-radius: inherit; background: var(--green); }
+    .meter-fill.full { background: #d48b21; }
+    .meter-foot { display: flex; justify-content: space-between; margin-top: 7px; color: var(--muted); font-size: 11px; }
+
+    .empty { border: 1px dashed #c9d4ca; border-radius: 16px; padding: 35px 20px; background: #fbfcfa; text-align: center; }
+    .empty-icon { font-size: 28px; }
+    .empty h3 { margin: 8px 0 3px; font-size: 15px; }
+    .empty p { max-width: 470px; margin: 0 auto; color: var(--muted); font-size: 13px; }
+
+    .lower-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(270px, .85fr); gap: 15px; margin-top: 29px; }
+    .panel { padding: 20px; }
+    .panel-title { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
+    .panel-title p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+    .recipient-count { flex: 0 0 auto; border-radius: 999px; padding: 5px 9px; background: #f0f3ef; color: var(--muted); font-size: 11px; font-weight: 700; }
+    .test-link { display: inline-block; margin-top: 13px; color: var(--green); font-size: 12px; font-weight: 700; text-decoration: none; }
+    .test-link:hover { text-decoration: underline; }
+    form.add-form { display: flex; gap: 9px; margin-top: 18px; }
+    input[type="email"] { min-width: 0; flex: 1; border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; background: #fff; color: var(--ink); font: inherit; font-size: 13px; }
+    input[type="email"]:focus { outline: 3px solid #236b4c20; border-color: var(--green); }
+    button { border: 0; border-radius: 9px; padding: 10px 14px; background: var(--green); color: #fff; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; }
+    button:hover { background: #19573d; }
+    .recipient-list { display: grid; gap: 8px; margin: 14px 0 0; padding: 0; list-style: none; }
+    .recipient { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #edf0eb; border-radius: 10px; padding: 9px 10px 9px 12px; }
+    .recipient-email { min-width: 0; overflow-wrap: anywhere; font-size: 13px; }
+    .remove-button { flex: 0 0 auto; padding: 6px 9px; background: var(--red-soft); color: var(--red); font-size: 11px; }
+    .remove-button:hover { background: #ffe3dd; }
+    .list-empty { margin: 14px 0 0; border-radius: 10px; padding: 13px; background: #f7f8f6; color: var(--muted); font-size: 12px; }
+    .backup-note { margin: 12px 0 0; color: var(--muted); font-size: 11px; }
+    .backup-status { display: inline-flex; align-items: center; gap: 6px; color: var(--green); font-weight: 700; }
+    .backup-status::before { width: 6px; height: 6px; border-radius: 50%; background: currentColor; content: ""; }
+    .backup-status.missing { color: var(--amber); }
+    .api-box { margin-top: 15px; border-radius: 11px; padding: 13px; background: #f4f6f1; }
+    .api-box strong { display: block; font-size: 12px; }
+    .api-box p { margin: 4px 0 8px; color: var(--muted); font-size: 11px; }
+    code { border-radius: 5px; padding: 2px 5px; background: #e8ede7; color: #284a39; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; }
+    pre { margin: 0; overflow-x: auto; color: #40564a; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; line-height: 1.65; }
+    .flash-list { display: grid; gap: 8px; margin-bottom: 17px; }
+    .flash { border-radius: 10px; padding: 10px 13px; font-size: 13px; }
+    .flash.success { background: var(--green-soft); color: var(--green); }
+    .flash.error { background: var(--red-soft); color: var(--red); }
+    footer { padding: 17px 0; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+
+    @media (max-width: 700px) {
+      .shell { width: min(100% - 28px, 540px); }
+      header { padding-top: 25px; }
+      .topline { align-items: start; }
+      .threshold-pill { padding: 7px 9px; font-size: 11px; }
+      .intro { margin-left: 0; }
+      .overview { gap: 8px; }
+      .stat { padding: 12px; }
+      .stat-value { font-size: 21px; }
+      .stat-hint { font-size: 10px; }
+      .lower-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 420px) {
+      .overview { grid-template-columns: 1fr 1fr; }
+      .overview .stat:last-child { grid-column: 1 / -1; }
+      .threshold-pill { max-width: 112px; white-space: normal; }
+      form.add-form { flex-direction: column; }
+      form.add-form button { width: 100%; }
+      .section-heading { align-items: start; flex-direction: column; gap: 3px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="shell">
+      <div class="topline">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">♻</div>
+          <div>
+            <p class="eyebrow">Waste monitoring</p>
+            <h1>Smart Bin Monitor</h1>
+          </div>
+        </div>
+        <div class="threshold-pill">Alert level <strong>{{ threshold }}%</strong></div>
+      </div>
+      <p class="intro">A clear view of your bins and the people who receive an alert when one needs attention.</p>
+    </div>
+  </header>
+
+  <main class="shell">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-list" role="status" aria-live="polite">
+          {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <section class="overview" aria-label="Overview">
+      <div class="stat">
+        <div class="stat-label">Connected bins</div>
+        <div class="stat-value">{{ bins|length }}</div>
+        <div class="stat-hint">Reporting to this dashboard</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Email recipients</div>
+        <div class="stat-value">{{ subscribers|length }}</div>
+        <div class="stat-hint">Managed from this page</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Notification rule</div>
+        <div class="stat-value">{{ threshold }}%</div>
+        <div class="stat-hint">One alert until the bin is emptied</div>
+      </div>
+    </section>
+
+    <section aria-labelledby="bins-heading">
+      <div class="section-heading">
+        <h2 id="bins-heading">Bin status</h2>
+        <div class="section-note">Each bin appears after its first status update.</div>
+      </div>
+
+      {% if bins %}
+        <div class="bin-grid">
+          {% for bin in bins %}
+            {% set is_full = bin["fullness"] >= threshold %}
+            <article class="bin-card">
+              <div class="bin-head">
+                <div>
+                  <h3 class="bin-id">{{ bin["bin_id"] }}</h3>
+                  <p class="bin-caption">Smart bin</p>
+                </div>
+                {% if is_full %}
+                  <span class="badge full">Needs emptying</span>
+                {% else %}
+                  <span class="badge ok">Looking good</span>
+                {% endif %}
+              </div>
+              <div class="level-row">
+                <div class="level">{{ bin["fullness"] }}<small>% full</small></div>
+                <div class="level-note">Alert at {{ threshold }}%</div>
+              </div>
+              <div class="meter" role="progressbar" aria-label="{{ bin['bin_id'] }} fullness" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ bin['fullness'] }}">
+                <div class="meter-fill{% if is_full %} full{% endif %}" style="width: {{ bin['fullness'] }}%"></div>
+              </div>
+              <div class="meter-foot"><span>Empty</span><span>Full</span></div>
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty">
+          <div class="empty-icon" aria-hidden="true">▤</div>
+          <h3>No bin data yet</h3>
+          <p>When a sensor sends its first reading, the bin will appear here. Give each bin its own ID to track several bins.</p>
+        </div>
+      {% endif %}
+    </section>
+
+    <div class="lower-grid">
+      <section class="panel" aria-labelledby="recipients-heading">
+        <div class="panel-title">
+          <div>
+            <h2 id="recipients-heading">Notification emails</h2>
+            <p>Every address here receives alerts for all connected bins.</p>
+          </div>
+          <span class="recipient-count">{{ subscribers|length }} saved</span>
+        </div>
+        <a class="test-link" href="{{ url_for('test_email') }}">Send a test email →</a>
+
+        <form class="add-form" action="{{ url_for('subscribe') }}" method="post">
+          <label class="visually-hidden" for="email">Email address</label>
+          <input id="email" type="email" name="email" placeholder="name@example.com" autocomplete="email" required>
+          <button type="submit">Add email</button>
+        </form>
+
+        {% if subscribers %}
+          <ul class="recipient-list">
+            {% for subscriber in subscribers %}
+              <li class="recipient">
+                <span class="recipient-email">{{ subscriber["email"] }}</span>
+                <form action="{{ url_for('unsubscribe') }}" method="post">
+                  <input type="hidden" name="email" value="{{ subscriber['email'] }}">
+                  <button class="remove-button" type="submit" aria-label="Remove {{ subscriber['email'] }}">Remove</button>
+                </form>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="list-empty">No UI recipients yet. Add an address above, or the backup address from your environment will receive alerts.</p>
+        {% endif %}
+
+        <p class="backup-note">
+          Backup recipient:
+          {% if fallback_configured %}
+            <span class="backup-status">configured in .env</span>
+          {% else %}
+            <span class="backup-status missing">not configured</span>
+          {% endif %}
+          <br>The backup is used only when this list is empty.
+        </p>
+      </section>
+
+      <section class="panel" aria-labelledby="device-heading">
+        <div class="panel-title">
+          <div>
+            <h2 id="device-heading">Connect a bin</h2>
+            <p>Send readings from your device to add or update a bin.</p>
+          </div>
+        </div>
+        <div class="api-box">
+          <strong>POST <code>/api/bin-status</code></strong>
+          <p>Include your <code>X-API-Key</code> header. Omit <code>bin_id</code> for the default <code>bin-1</code>.</p>
+          <pre>{
+  "bin_id": "kitchen",
+  "fullness": 64
+}</pre>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer>
+    <div class="shell">Smart Bin Monitor · Alerts are sent when a bin reaches {{ threshold }}% fullness.</div>
+  </footer>
+
+  <style>
+    .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+  </style>
+</body>
+</html>
