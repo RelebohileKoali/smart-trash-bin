@@ -7,13 +7,9 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn backend.app:app --bind 0.0.0.0:$PORT --workers 1
     healthCheckPath: /healthz
-    disk:
-      name: smart-bin-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
-      - key: DATABASE_PATH
-        value: /var/data/smart_bin.db
+      - key: DATABASE_URL
+        sync: false
       - key: BIN_API_KEY
         generateValue: true
       - key: FLASK_SECRET_KEY
@@ -21,4 +17,6 @@ services:
       - key: RESEND_API_KEY
         sync: false
       - key: EMAIL_FROM
+        sync: false
+      - key: EMAIL_ADDRESS
         sync: false

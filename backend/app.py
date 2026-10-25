@@ -3,37 +3,70 @@ import math
 import os
 import sqlite3
 
+import psycopg
 import resend
 from dotenv import load_dotenv
 from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
+from psycopg.rows import dict_row
 
 load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY") or os.urandom(32)
 
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = "postgresql://" + DATABASE_URL.removeprefix("postgres://")
+
 DATABASE = os.getenv("DATABASE_PATH", "smart_bin.db")
+USE_POSTGRES = bool(DATABASE_URL)
 FULL_THRESHOLD = 90
 DEFAULT_BIN_ID = "bin-1"
 
 
 def get_connection():
+    if USE_POSTGRES:
+        return psycopg.connect(DATABASE_URL, row_factory=dict_row, connect_timeout=10)
+
     connection = sqlite3.connect(DATABASE)
     connection.row_factory = sqlite3.Row
     return connection
 
 
+def db_execute(connection, query, parameters=()):
+    if USE_POSTGRES:
+        query = query.replace("?", "%s")
+    return connection.execute(query, parameters)
+
+
 def create_database():
+    if USE_POSTGRES:
+        with get_connection() as connection:
+            db_execute(connection, """
+                CREATE TABLE IF NOT EXISTS subscribers (
+                    id BIGSERIAL PRIMARY KEY,
+                    email TEXT UNIQUE NOT NULL
+                )
+            """)
+            db_execute(connection, """
+                CREATE TABLE IF NOT EXISTS bins (
+                    bin_id TEXT PRIMARY KEY,
+                    fullness INTEGER NOT NULL DEFAULT 0,
+                    notification_sent INTEGER NOT NULL DEFAULT 0
+                )
+            """)
+        return
+
     os.makedirs(os.path.dirname(os.path.abspath(DATABASE)), exist_ok=True)
     with get_connection() as connection:
-        connection.execute("""
+        db_execute(connection, """
             CREATE TABLE IF NOT EXISTS subscribers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 email TEXT UNIQUE NOT NULL
             )
         """)
 
-        connection.execute("""
+        db_execute(connection, """
             CREATE TABLE IF NOT EXISTS bins (
                 bin_id TEXT PRIMARY KEY,
                 fullness INTEGER NOT NULL DEFAULT 0,
@@ -42,15 +75,15 @@ def create_database():
         """)
 
         # Carry forward the original single-bin status if this database has it.
-        legacy_table = connection.execute(
+        legacy_table = db_execute(connection,
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'bin_status'"
         ).fetchone()
         if legacy_table:
-            legacy_status = connection.execute(
+            legacy_status = db_execute(connection,
                 "SELECT fullness, notification_sent FROM bin_status WHERE id = 1"
             ).fetchone()
             if legacy_status:
-                connection.execute(
+                db_execute(connection,
                     """
                     INSERT OR IGNORE INTO bins (bin_id, fullness, notification_sent)
                     VALUES (?, ?, ?)
@@ -61,8 +94,8 @@ def create_database():
 
 def get_notification_recipients():
     with get_connection() as connection:
-        subscribers = connection.execute(
-            "SELECT email FROM subscribers ORDER BY email COLLATE NOCASE"
+        subscribers = db_execute(connection,
+            "SELECT email FROM subscribers ORDER BY lower(email)"
         ).fetchall()
 
     if subscribers:
@@ -118,11 +151,11 @@ def email_notification_recipients(bin_id, fullness):
 @app.route("/")
 def index():
     with get_connection() as connection:
-        bins = connection.execute(
-            "SELECT bin_id, fullness FROM bins ORDER BY bin_id COLLATE NOCASE"
+        bins = db_execute(connection,
+            "SELECT bin_id, fullness FROM bins ORDER BY lower(bin_id)"
         ).fetchall()
-        subscribers = connection.execute(
-            "SELECT email FROM subscribers ORDER BY email COLLATE NOCASE"
+        subscribers = db_execute(connection,
+            "SELECT email FROM subscribers ORDER BY lower(email)"
         ).fetchall()
 
     return render_template(
@@ -138,8 +171,8 @@ def index():
 def health_check():
     try:
         with get_connection() as connection:
-            connection.execute("SELECT 1")
-    except sqlite3.Error:
+            db_execute(connection, "SELECT 1")
+    except (sqlite3.Error, psycopg.Error):
         app.logger.exception("Health check failed")
         return jsonify({"status": "unhealthy"}), 503
 
@@ -156,11 +189,11 @@ def subscribe():
 
     try:
         with get_connection() as connection:
-            connection.execute(
+            db_execute(connection,
                 "INSERT INTO subscribers (email) VALUES (?)",
                 (email,),
             )
-    except sqlite3.IntegrityError:
+    except (sqlite3.IntegrityError, psycopg.IntegrityError):
         flash("That email is already on the notification list.", "error")
     else:
         flash("Email added. It will receive alerts for every bin.", "success")
@@ -172,7 +205,7 @@ def subscribe():
 def unsubscribe():
     email = request.form.get("email", "").strip().lower()
     with get_connection() as connection:
-        result = connection.execute(
+        result = db_execute(connection,
             "DELETE FROM subscribers WHERE email = ?",
             (email,),
         )
@@ -233,7 +266,7 @@ def update_bin_status():
     fullness = round(fullness)
 
     with get_connection() as connection:
-        current = connection.execute(
+        current = db_execute(connection,
             "SELECT notification_sent FROM bins WHERE bin_id = ?",
             (bin_id,),
         ).fetchone()
@@ -244,7 +277,7 @@ def update_bin_status():
         if fullness < FULL_THRESHOLD:
             notification_sent = 0
 
-        connection.execute(
+        db_execute(connection,
             """
             INSERT INTO bins (bin_id, fullness, notification_sent)
             VALUES (?, ?, ?)
@@ -262,7 +295,7 @@ def update_bin_status():
 
         if recipients_configured and not failures:
             with get_connection() as connection:
-                connection.execute(
+                db_execute(connection,
                     "UPDATE bins SET notification_sent = 1 WHERE bin_id = ?",
                     (bin_id,),
                 )
